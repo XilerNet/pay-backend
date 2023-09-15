@@ -13,7 +13,7 @@ dotenv = "0.15.0"
 poem = "1.3.58"
 poem-openapi = { version = "3.0.5", features = ["swagger-ui", "openapi-explorer"] }
 serde = { version = "1.0.188", features = ["derive"] }
-sqlx = { version = "0.7.1", features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "time"] }
+sqlx = { version = "0.7.1", features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "time", "rust_decimal"] }
 tokio = { version = "1.32.0", features = ["full"] }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
@@ -21,3 +21,4 @@ uuid = { version = "1.4.1", features = ["serde"] }
 rust-crypto = "0.2.36"
 lazy_static = "1.4.0"
 hex = "0.4.3"
+chrono = { version = "0.4.31", features = ["serde"] }
