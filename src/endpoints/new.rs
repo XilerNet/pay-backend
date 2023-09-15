@@ -8,6 +8,8 @@ use crate::db::{PaymentRepository, Repository};
 use crate::responses::error::ErrorResponse;
 use crate::{CHAIN, DOMAIN_PRICE_BTC};
 
+const DOMAIN_REGEX: &str = r"^[a-z\d](?:[a-z\d-]{0,251}[a-z\d])?\.?o?$";
+
 #[derive(Debug, Object, Clone, Eq, PartialEq)]
 pub struct CreatePaymentData {
     domains: Vec<String>,
@@ -25,6 +27,9 @@ pub enum CreatePaymentResponse {
     #[oai(status = 200)]
     Ok(Json<CreatePaymentResponseObject>),
 
+    #[oai(status = 400)]
+    BadRequest(Json<ErrorResponse>),
+
     #[oai(status = 401)]
     Unauthorized(Json<ErrorResponse>),
 
@@ -38,12 +43,32 @@ pub async fn new(
     user: &Uuid,
     data: &CreatePaymentData,
 ) -> CreatePaymentResponse {
+    if data.domains.len() == 0 {
+        return CreatePaymentResponse::BadRequest(Json("No domains provided".into()));
+    }
+
     let address = rpc
         .get_new_address(None, Some(AddressType::Bech32m))
         .unwrap()
         .require_network(CHAIN.network())
         .unwrap()
         .to_string();
+
+    let domains = data.domains.iter().filter(|d| d.len() > 0).map(|d| {
+        if d.ends_with(".o") {
+            d.clone()
+        } else {
+            format!("{}.o", d)
+        }
+    });
+
+    for domain in domains {
+        if !regex::Regex::new(DOMAIN_REGEX).unwrap().is_match(&domain) {
+            return CreatePaymentResponse::BadRequest(Json(
+                format!("Invalid domain: {}", domain).as_str().into(),
+            ));
+        }
+    }
 
     let amount = data.domains.len() as f64 * DOMAIN_PRICE_BTC;
 
