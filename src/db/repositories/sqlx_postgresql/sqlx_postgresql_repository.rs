@@ -3,7 +3,7 @@ use tracing::{debug, error};
 use uuid::Uuid;
 
 use crate::{
-    db::{log::LogTypes, PaymentRepository},
+    db::{log::LogTypes, traits::SessionRepository, PaymentRepository},
     utils::encryption::encrypt_string,
 };
 
@@ -226,5 +226,18 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         debug!("[DB] Initiated payment {}", payment_id);
 
         Ok(())
+    }
+}
+
+impl SessionRepository for SqlxPostgresqlRepository {
+    async fn get_session(&self, token: &str) -> Result<Uuid, sqlx::Error> {
+        debug!("[DB] Getting session {}", token);
+        let id = sqlx::query!(r#"SELECT account_id FROM sessions WHERE id = $1;"#, token)
+            .fetch_one(&self.pool)
+            .await?;
+
+        debug!("[DB] Got session {} from token {}", id.account_id, token);
+
+        Ok(id.account_id)
     }
 }
