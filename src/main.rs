@@ -1,8 +1,11 @@
 #![feature(async_fn_in_trait)]
-use std::{collections::HashSet, env, sync::Arc};
+use std::{env, str::FromStr, sync::Arc};
 
 use bitcoin::chain::Chain;
-use bitcoincore_rpc::{json::AddressType, Auth, Client, RpcApi};
+use bitcoincore_rpc::{
+    bitcoin::{address::NetworkChecked, Address},
+    Auth, Client, RpcApi,
+};
 use db::{traits::SessionRepository, PaymentRepository, Repository};
 use endpoints::{
     new::{CreatePaymentData, CreatePaymentResponse},
@@ -15,7 +18,10 @@ use poem_openapi::{
     auth::Bearer, param::Path, payload::Json, OpenApi, OpenApiService, SecurityScheme,
 };
 use std::ops::Deref;
+use tracing::{debug, error};
 use uuid::Uuid;
+
+use crate::db::log::LogTypes;
 
 pub mod bitcoin;
 pub mod db;
@@ -27,6 +33,7 @@ pub const CHAIN: Chain = Chain::Testnet;
 pub const DOMAIN_PRICE_BTC: f64 = 0.0005;
 const BITCOIN_WALLET_NAME: &str = "ord";
 const COOKIE_LOCATION: &str = "/run/media/arthur/T7/bitcoin/testnet3/.cookie";
+const CONFIRMATIONS_REQUIRED: u32 = 6;
 
 struct ApiKeyContext {
     id: Uuid,
@@ -87,46 +94,145 @@ impl Api {
     }
 }
 
-async fn background_payment_processor() {
+fn get_rpc() -> Client {
     let rpc_url = format!(
         "http://localhost:{}/wallet/{}",
         CHAIN.default_rpc_port(),
         BITCOIN_WALLET_NAME
     );
-    let rpc = Client::new(&rpc_url, Auth::CookieFile(COOKIE_LOCATION.into())).unwrap();
 
-    // get new wallet address
-    let address = rpc
-        .get_new_address(None, Some(AddressType::Bech32m))
-        .unwrap()
-        .require_network(CHAIN.network())
-        .unwrap();
-    println!("New address: {}", address);
-    println!("Waiting for UTXO's...");
+    Client::new(&rpc_url, Auth::CookieFile(COOKIE_LOCATION.into())).unwrap()
+}
 
-    let mut received_transactions = HashSet::new();
-    let mut total_received = 0.0;
+async fn background_payment_processor() {
+    debug!("Starting background payment processor");
+    let rpc = get_rpc();
+    let pool = Repository::new().await;
+    debug!("Connected to Bitcoin RPC and database");
 
     loop {
+        let watch_addresses = pool
+            .get_to_be_initiated_addresses()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|address| Address::from_str(&address).unwrap())
+            .map(|address| address.require_network(CHAIN.network()))
+            .flatten()
+            .collect::<Vec<Address<NetworkChecked>>>();
+
         let utxos = rpc
-            .list_unspent(Some(0), Some(999_999), Some(&[&address]), Some(true), None)
+            .list_unspent(
+                Some(0),
+                Some(100), // Do not update utxo's with more than 100 confirmations
+                Some(watch_addresses.iter().collect::<Vec<_>>().as_slice()),
+                Some(true),
+                None,
+            )
             .unwrap();
 
         if utxos.len() > 0 {
             for utxo in &utxos {
-                if !received_transactions.contains(&utxo.txid) {
-                    println!(
-                        "txid: {}, vout: {}, amount: {}, confirmations: {}",
-                        utxo.txid, utxo.vout, utxo.amount, utxo.confirmations
+                let address = match utxo
+                    .address
+                    .clone()
+                    .unwrap()
+                    .require_network(CHAIN.network())
+                {
+                    Ok(address) => address.to_string(),
+                    Err(_) => continue,
+                };
+
+                let amount = utxo.amount.to_btc();
+                let txid = utxo.txid.clone().to_string();
+                let confirmations = utxo.confirmations;
+
+                let is_already_processed =
+                    pool.is_already_processed(&txid, &address).await.unwrap();
+
+                if is_already_processed {
+                    continue;
+                }
+
+                let payment = match pool.get_payment_by_address(&address).await.unwrap() {
+                    Some(payment_id) => payment_id,
+                    None => continue,
+                };
+
+                if !payment.initiated {
+                    let res = pool.initiate_payment(&payment.id).await;
+
+                    if let Err(e) = res {
+                        error!("Error initiating payment: {}", e);
+                        continue;
+                    }
+
+                    let log_message = format!(
+                        "account {}, payment: {} transaction: {}, initiated: ({}BTC)",
+                        payment.account_id, payment.id, txid, payment.amount
                     );
-                    total_received += utxo.amount.to_btc();
-                    received_transactions.insert(utxo.txid);
-                    println!("Total received: {}", total_received);
+                    let res = pool
+                        .add_log(
+                            &payment.account_id,
+                            LogTypes::PaymentReceivedUnconfirmed,
+                            Some(&log_message),
+                        )
+                        .await;
+
+                    if let Err(e) = res {
+                        error!("Error adding log: {}", e);
+                        continue;
+                    }
+                }
+
+                let existing_confirmations = payment.confirmations as u32;
+
+                if confirmations > existing_confirmations {
+                    let diff = confirmations - existing_confirmations;
+                    let res = pool
+                        .add_payment_confirmation(&payment.id, diff as u64)
+                        .await;
+
+                    if let Err(e) = res {
+                        error!("Error adding payment confirmation: {}", e);
+                        continue;
+                    }
+
+                    debug!("Added {} confirmations for payment {}", diff, payment.id);
+                }
+
+                if confirmations < CONFIRMATIONS_REQUIRED {
+                    continue;
+                }
+
+                let res = pool.add_payment_received(&payment.id, amount, &txid).await;
+
+                if let Err(e) = res {
+                    error!("Error adding payment received: {}", e);
+                    continue;
+                }
+
+                debug!("Added payment received for payment {}", payment.id);
+
+                let log_message = format!(
+                    "account {}, payment: {} transaction: {}, received {}BTC",
+                    payment.account_id, payment.id, txid, amount
+                );
+                let res = pool
+                    .add_log(
+                        &payment.account_id,
+                        LogTypes::PaymentReceivedConfirmed,
+                        Some(&log_message),
+                    )
+                    .await;
+
+                if let Err(e) = res {
+                    error!("Error adding log: {}", e);
+                    continue;
                 }
             }
         }
 
-        // sleep for 1 second
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }
@@ -139,13 +245,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let repository = Repository::new().await;
 
-    let rpc_url = format!(
-        "http://localhost:{}/wallet/{}",
-        CHAIN.default_rpc_port(),
-        BITCOIN_WALLET_NAME
-    );
-    let rpc = Client::new(&rpc_url, Auth::CookieFile(COOKIE_LOCATION.into())).unwrap();
-
+    let rpc = get_rpc();
     if !rpc
         .list_wallets()
         .unwrap()

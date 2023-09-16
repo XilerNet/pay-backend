@@ -25,6 +25,7 @@ where
         &self,
         payment_id: &Uuid,
         received: f64,
+        transaction_id: &str,
     ) -> Result<(), sqlx::Error>;
 
     async fn complete_payment(&self, payment_id: &Uuid) -> Result<(), sqlx::Error>;
@@ -45,7 +46,7 @@ where
 
     async fn initiate_payment(&self, payment_id: &Uuid) -> Result<(), sqlx::Error>;
 
-    async fn get_to_be_initiated_payments(&self) -> Result<Vec<Uuid>, sqlx::Error>;
+    async fn get_to_be_initiated_addresses(&self) -> Result<Vec<String>, sqlx::Error>;
 
     async fn get_to_be_completed_payments(
         &self,
@@ -53,4 +54,12 @@ where
     ) -> Result<Vec<Uuid>, sqlx::Error>;
 
     async fn get_payment(&self, payment_id: &Uuid) -> Result<Option<Payment>, sqlx::Error>;
+
+    async fn is_already_processed(
+        &self,
+        transaction_id: &str,
+        address: &str,
+    ) -> Result<bool, sqlx::Error>;
+
+    async fn get_payment_by_address(&self, address: &str) -> Result<Option<Payment>, sqlx::Error>;
 }

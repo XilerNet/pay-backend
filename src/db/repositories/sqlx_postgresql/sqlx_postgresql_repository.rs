@@ -105,25 +105,49 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         &self,
         payment_id: &Uuid,
         received: f64,
+        transaction_id: &str,
     ) -> Result<(), sqlx::Error> {
-        debug!("[DB] Adding payment received {} {}", payment_id, received);
+        debug!(
+            "[DB] Adding payment received {} {} {}",
+            payment_id, received, transaction_id
+        );
+
+        let res = sqlx::query!(
+            r#"INSERT INTO payment_transactions (payment_id, transaction_id) VALUES ($1, $2);"#,
+            payment_id,
+            transaction_id
+        );
+
+        let res = res.execute(&self.pool).await;
+
+        if let Err(e) = res {
+            error!(
+                "[DB] Failed to add payment received {} {} {}",
+                payment_id, received, transaction_id
+            );
+            return Err(e);
+        }
 
         let res = sqlx::query!(
             r#"UPDATE payments SET received = received + $1 WHERE id = $2;"#,
             received,
             payment_id
         );
+
         let res = res.execute(&self.pool).await;
 
         if let Err(e) = res {
             error!(
-                "[DB] Failed to add payment received {} {}",
-                payment_id, received
+                "[DB] Failed to add payment received {} {} {}",
+                payment_id, received, transaction_id
             );
             return Err(e);
         }
 
-        debug!("[DB] Added payment received {} {}", payment_id, received);
+        debug!(
+            "[DB] Added payment received {} {} {}",
+            payment_id, received, transaction_id
+        );
 
         Ok(())
     }
@@ -231,10 +255,10 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         Ok(())
     }
 
-    async fn get_to_be_initiated_payments(&self) -> Result<Vec<Uuid>, sqlx::Error> {
+    async fn get_to_be_initiated_addresses(&self) -> Result<Vec<String>, sqlx::Error> {
         debug!("[DB] Getting to be initiated payments");
 
-        let res = sqlx::query!(r#"SELECT id FROM payments WHERE initiated = FALSE;"#)
+        let res = sqlx::query!(r#"SELECT address FROM payments WHERE initiated = FALSE;"#)
             .fetch_all(&self.pool)
             .await;
 
@@ -248,7 +272,7 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         let mut payments = Vec::new();
 
         for row in res {
-            payments.push(row.id);
+            payments.push(row.address);
         }
 
         debug!("[DB] Got to be initiated payments {:?}", payments);
@@ -324,6 +348,83 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         }
 
         debug!("[DB] Payment {} not found", payment_id);
+
+        Ok(None)
+    }
+
+    async fn is_already_processed(
+        &self,
+        transaction_id: &str,
+        address: &str,
+    ) -> Result<bool, sqlx::Error> {
+        debug!(
+            "[DB] Checking if transaction {} for address {} is already processed",
+            transaction_id, address
+        );
+
+        let res = sqlx::query!(
+            r#"SELECT * FROM payment_transactions WHERE transaction_id = $1 AND payment_id IN (SELECT id FROM payments WHERE address = $2);"#,
+            transaction_id,
+            address
+        )
+        .fetch_optional(&self.pool)
+        .await;
+
+        if let Err(e) = res {
+            error!(
+                "[DB] Failed to check if transaction {} for address {} is already processed",
+                transaction_id, address
+            );
+            return Err(e);
+        }
+
+        let res = res.unwrap();
+        if let Some(_) = res {
+            debug!(
+                "[DB] Transaction {} for address {} is already processed",
+                transaction_id, address
+            );
+            return Ok(true);
+        }
+
+        debug!(
+            "[DB] Transaction {} for address {} is not processed yet",
+            transaction_id, address
+        );
+        return Ok(false);
+    }
+
+    async fn get_payment_by_address(&self, address: &str) -> Result<Option<Payment>, sqlx::Error> {
+        debug!("[DB] Getting payment by address {}", address);
+
+        let res = sqlx::query!(r#"SELECT * FROM payments WHERE address = $1;"#, address)
+            .fetch_optional(&self.pool)
+            .await;
+
+        if let Err(e) = res {
+            error!("[DB] Failed to get payment by address {}", address);
+            return Err(e);
+        }
+
+        let res = res.unwrap();
+
+        if let Some(row) = res {
+            debug!("[DB] Got payment by address {}", address);
+            return Ok(Some(Payment {
+                id: row.id,
+                account_id: row.account_id,
+                address: row.address,
+                amount: row.amount,
+                received: row.received,
+                confirmations: row.confirmations,
+                initiated: row.initiated,
+                completed: row.completed,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            }));
+        }
+
+        debug!("[DB] Payment by address {} not found", address);
 
         Ok(None)
     }
