@@ -23,3 +23,6 @@ lazy_static = "1.4.0"
 hex = "0.4.3"
 chrono = { version = "0.4.31", features = ["serde"] }
 regex = "1.9.5"
+pqcrypto = "0.16.1"
+pqcrypto-dilithium = "0.4.6"
+pqcrypto-traits = "0.3.4"

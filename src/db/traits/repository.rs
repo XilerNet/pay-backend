@@ -53,4 +53,23 @@ where
     ) -> Result<bool, sqlx::Error>;
 
     async fn get_payment_by_address(&self, address: &str) -> Result<Option<Payment>, sqlx::Error>;
+
+    async fn add_payment_inscription_contents(
+        &self,
+        payment_id: &Uuid,
+        target: &str,
+        contents: &str,
+    ) -> Result<(), sqlx::Error>;
+
+    async fn get_payment_inscriptions_content(
+        &self,
+        payment_id: &Uuid,
+    ) -> Result<Option<Vec<(String, String)>>, sqlx::Error>;
+
+    async fn add_private_key(
+        &self,
+        account_id: &Uuid,
+        domain: &str,
+        private_key: &str,
+    ) -> Result<(), sqlx::Error>;
 }

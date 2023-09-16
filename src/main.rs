@@ -18,7 +18,7 @@ use poem_openapi::{
     auth::Bearer, param::Path, payload::Json, OpenApi, OpenApiService, SecurityScheme,
 };
 use std::ops::Deref;
-use tracing::{debug, error};
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::db::log::LogTypes;
@@ -82,7 +82,6 @@ impl Api {
         endpoints::new::new(&pool, &rpc, &auth.id, &data).await
     }
 
-    // TODO: Status endpoint
     #[oai(path = "/status/:id", method = "get")]
     async fn status(
         &self,
@@ -105,10 +104,10 @@ fn get_rpc() -> Client {
 }
 
 async fn background_payment_processor() {
-    debug!("Starting background payment processor");
+    info!("Starting background payment processor");
     let rpc = get_rpc();
     let pool = Repository::new().await;
-    debug!("Connected to Bitcoin RPC and database");
+    info!("Connected to Bitcoin RPC and database");
 
     loop {
         let watch_addresses = pool
@@ -196,7 +195,7 @@ async fn background_payment_processor() {
                     continue;
                 }
 
-                debug!("Added payment received for payment {}", payment.id);
+                info!("Payment {} received {}BTC", payment.id, amount);
 
                 let log_message = format!(
                     "account {}, payment: {} transaction: {}, received {}BTC",

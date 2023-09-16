@@ -380,6 +380,127 @@ impl PaymentRepository for SqlxPostgresqlRepository {
 
         Ok(None)
     }
+
+    // CREATE TABLE IF NOT EXISTS payment_inscription_contents (
+    //   payment_id UUID PRIMARY KEY REFERENCES payments(id),
+    //   target VARCHAR(255) NOT NULL,
+    //   content TEXT NOT NULL
+    // );
+
+    async fn add_payment_inscription_contents(
+        &self,
+        payment_id: &Uuid,
+        target: &str,
+        contents: &str,
+    ) -> Result<(), sqlx::Error> {
+        debug!(
+            "[DB] Adding payment inscription contents for payment {}",
+            payment_id
+        );
+
+        let res = sqlx::query!(
+            r#"INSERT INTO payment_inscription_contents (payment_id, target, content) VALUES ($1, $2, $3);"#,
+            payment_id,
+            target,
+            contents
+        )
+        .execute(&self.pool)
+        .await;
+
+        if let Err(e) = res {
+            error!(
+                "[DB] Failed to add payment inscription contents for payment {}",
+                payment_id
+            );
+            return Err(e);
+        }
+
+        debug!(
+            "[DB] Added payment inscription contents for payment {}",
+            payment_id
+        );
+
+        Ok(())
+    }
+
+    async fn get_payment_inscriptions_content(
+        &self,
+        payment_id: &Uuid,
+    ) -> Result<Option<Vec<(String, String)>>, sqlx::Error> {
+        debug!(
+            "[DB] Getting payment inscription contents for payment {}",
+            payment_id
+        );
+
+        let res = sqlx::query!(
+            r#"SELECT target, content FROM payment_inscription_contents WHERE payment_id = $1;"#,
+            payment_id
+        )
+        .fetch_all(&self.pool)
+        .await;
+
+        if let Err(e) = res {
+            error!(
+                "[DB] Failed to get payment inscription contents for payment {}",
+                payment_id
+            );
+            return Err(e);
+        }
+
+        let res = res.unwrap();
+
+        let mut contents = Vec::new();
+
+        for row in res {
+            contents.push((row.target, row.content));
+        }
+
+        debug!(
+            "[DB] Got payment inscription contents for payment {}",
+            payment_id
+        );
+
+        Ok(Some(contents))
+    }
+
+    async fn add_private_key(
+        &self,
+        account_id: &Uuid,
+        domain: &str,
+        private_key: &str,
+    ) -> Result<(), sqlx::Error> {
+        debug!(
+            "[DB] Adding private key for account {} and domain {}",
+            account_id, domain
+        );
+
+        let (private_key, encryption_method) = encrypt_string(private_key);
+
+        let res = sqlx::query!(
+            r#"INSERT INTO private_keys (account_id, domain, encryption_method, private_key) VALUES ($1, $2, $3, $4);"#,
+            account_id,
+            domain,
+            encryption_method as i16,
+            private_key
+        )
+        .execute(&self.pool)
+        .await;
+
+        if let Err(e) = res {
+            error!(
+                "[DB] Failed to add private key for account {} and domain {}",
+                account_id, domain
+            );
+            return Err(e);
+        }
+
+        debug!(
+            "[DB] Added private key for account {} and domain {}",
+            account_id, domain
+        );
+
+        Ok(())
+    }
 }
 
 impl SessionRepository for SqlxPostgresqlRepository {
