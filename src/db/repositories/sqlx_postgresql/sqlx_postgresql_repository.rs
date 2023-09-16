@@ -3,7 +3,10 @@ use tracing::{debug, error};
 use uuid::Uuid;
 
 use crate::{
-    db::{log::LogTypes, traits::SessionRepository, PaymentRepository},
+    db::{
+        log::LogTypes, repositories::models::payment::Payment, traits::SessionRepository,
+        PaymentRepository,
+    },
     utils::encryption::encrypt_string,
 };
 
@@ -226,6 +229,103 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         debug!("[DB] Initiated payment {}", payment_id);
 
         Ok(())
+    }
+
+    async fn get_to_be_initiated_payments(&self) -> Result<Vec<Uuid>, sqlx::Error> {
+        debug!("[DB] Getting to be initiated payments");
+
+        let res = sqlx::query!(r#"SELECT id FROM payments WHERE initiated = FALSE;"#)
+            .fetch_all(&self.pool)
+            .await;
+
+        if let Err(e) = res {
+            error!("[DB] Failed to get to be initiated payments");
+            return Err(e);
+        }
+
+        let res = res.unwrap();
+
+        let mut payments = Vec::new();
+
+        for row in res {
+            payments.push(row.id);
+        }
+
+        debug!("[DB] Got to be initiated payments {:?}", payments);
+
+        Ok(payments)
+    }
+
+    async fn get_to_be_completed_payments(
+        &self,
+        min_confirmations: usize,
+    ) -> Result<Vec<Uuid>, sqlx::Error> {
+        debug!(
+            "[DB] Getting to be completed payments with min confirmations {}",
+            min_confirmations
+        );
+
+        let res = sqlx::query!(
+            r#"SELECT id FROM payments WHERE initiated = TRUE AND completed = FALSE AND confirmations >= $1;"#,
+            min_confirmations as i32
+        )
+        .fetch_all(&self.pool)
+        .await;
+
+        if let Err(e) = res {
+            error!(
+                "[DB] Failed to get to be completed payments with min confirmations {}",
+                min_confirmations
+            );
+            return Err(e);
+        }
+
+        let res = res.unwrap();
+
+        let mut payments = Vec::new();
+
+        for row in res {
+            payments.push(row.id);
+        }
+
+        debug!("[DB] Got to be completed payments {:?}", payments);
+
+        Ok(payments)
+    }
+
+    async fn get_payment(&self, payment_id: &Uuid) -> Result<Option<Payment>, sqlx::Error> {
+        debug!("[DB] Getting payment {}", payment_id);
+
+        let res = sqlx::query!(r#"SELECT * FROM payments WHERE id = $1;"#, payment_id)
+            .fetch_optional(&self.pool)
+            .await;
+
+        if let Err(e) = res {
+            error!("[DB] Failed to get payment {}", payment_id);
+            return Err(e);
+        }
+
+        let res = res.unwrap();
+
+        if let Some(row) = res {
+            debug!("[DB] Got payment {}", payment_id);
+            return Ok(Some(Payment {
+                id: row.id,
+                account_id: row.account_id,
+                address: row.address,
+                amount: row.amount,
+                received: row.received,
+                confirmations: row.confirmations,
+                initiated: row.initiated,
+                completed: row.completed,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            }));
+        }
+
+        debug!("[DB] Payment {} not found", payment_id);
+
+        Ok(None)
     }
 }
 

@@ -1,6 +1,6 @@
+use chrono::NaiveDateTime;
 use poem_openapi::Object;
 use serde::Serialize;
-use sqlx::types::chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(Debug, Object, Serialize, Clone, PartialEq)]
@@ -12,9 +12,10 @@ pub struct Payment {
     pub amount: f64,
     pub received: f64,
 
-    pub confirmations: u64,
+    pub confirmations: i32,
     pub initiated: bool,
+    pub completed: bool,
 
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }

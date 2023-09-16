@@ -4,11 +4,16 @@ use std::{collections::HashSet, env, sync::Arc};
 use bitcoin::chain::Chain;
 use bitcoincore_rpc::{json::AddressType, Auth, Client, RpcApi};
 use db::{traits::SessionRepository, PaymentRepository, Repository};
-use endpoints::new::{CreatePaymentData, CreatePaymentResponse};
+use endpoints::{
+    new::{CreatePaymentData, CreatePaymentResponse},
+    status::PaymentStatusResponse,
+};
 use poem::{
     listener::TcpListener, middleware::Cors, web::Data, EndpointExt, Request, Route, Server,
 };
-use poem_openapi::{auth::Bearer, payload::Json, OpenApi, OpenApiService, SecurityScheme};
+use poem_openapi::{
+    auth::Bearer, param::Path, payload::Json, OpenApi, OpenApiService, SecurityScheme,
+};
 use std::ops::Deref;
 use uuid::Uuid;
 
@@ -71,10 +76,18 @@ impl Api {
     }
 
     // TODO: Status endpoint
+    #[oai(path = "/status/:id", method = "get")]
+    async fn status(
+        &self,
+        pool: Data<&Repository>,
+        auth: AuthApiKey,
+        id: Path<Uuid>,
+    ) -> PaymentStatusResponse {
+        endpoints::status::status(&pool, &auth.id, &id).await
+    }
 }
 
-// TODO: Make background task to check for payments and update those states
-fn mmain() {
+async fn background_payment_processor() {
     let rpc_url = format!(
         "http://localhost:{}/wallet/{}",
         CHAIN.default_rpc_port(),
@@ -113,7 +126,8 @@ fn mmain() {
             }
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        // sleep for 1 second
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }
 
@@ -161,6 +175,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(Cors::new().allow_origins(origins))
         .data(repository)
         .data(rpc);
+
+    tokio::spawn(background_payment_processor());
 
     Server::new(TcpListener::bind("127.0.0.1:25202"))
         .run(routes)

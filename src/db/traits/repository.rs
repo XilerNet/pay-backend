@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::db::log::LogTypes;
+use crate::db::{log::LogTypes, repositories::models::payment::Payment};
 
 pub trait PaymentRepository
 where
@@ -44,4 +44,13 @@ where
     ) -> Result<(), sqlx::Error>;
 
     async fn initiate_payment(&self, payment_id: &Uuid) -> Result<(), sqlx::Error>;
+
+    async fn get_to_be_initiated_payments(&self) -> Result<Vec<Uuid>, sqlx::Error>;
+
+    async fn get_to_be_completed_payments(
+        &self,
+        min_confirmations: usize,
+    ) -> Result<Vec<Uuid>, sqlx::Error>;
+
+    async fn get_payment(&self, payment_id: &Uuid) -> Result<Option<Payment>, sqlx::Error>;
 }
