@@ -67,40 +67,6 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         Ok(())
     }
 
-    // Append x confirmations to a payment
-    async fn add_payment_confirmation(
-        &self,
-        payment_id: &Uuid,
-        confirmations: u64,
-    ) -> Result<(), sqlx::Error> {
-        debug!(
-            "[DB] Adding payment confirmation {} {}",
-            payment_id, confirmations
-        );
-
-        let res = sqlx::query!(
-            r#"UPDATE payments SET confirmations = confirmations + $1 WHERE id = $2;"#,
-            confirmations as i32,
-            payment_id
-        );
-        let res = res.execute(&self.pool).await;
-
-        if let Err(e) = res {
-            error!(
-                "[DB] Failed to add payment confirmation {} {}",
-                payment_id, confirmations
-            );
-            return Err(e);
-        }
-
-        debug!(
-            "[DB] Added payment confirmation {} {}",
-            payment_id, confirmations
-        );
-
-        Ok(())
-    }
-
     async fn add_payment_received(
         &self,
         payment_id: &Uuid,
@@ -280,27 +246,15 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         Ok(payments)
     }
 
-    async fn get_to_be_completed_payments(
-        &self,
-        min_confirmations: usize,
-    ) -> Result<Vec<Uuid>, sqlx::Error> {
-        debug!(
-            "[DB] Getting to be completed payments with min confirmations {}",
-            min_confirmations
-        );
+    async fn get_to_be_completed_payments(&self) -> Result<Vec<Uuid>, sqlx::Error> {
+        debug!("[DB] Getting to be completed payments");
 
-        let res = sqlx::query!(
-            r#"SELECT id FROM payments WHERE initiated = TRUE AND completed = FALSE AND confirmations >= $1;"#,
-            min_confirmations as i32
-        )
+        let res = sqlx::query!( r#"SELECT id FROM payments WHERE initiated = TRUE AND completed = FALSE AND received >= amount"#)
         .fetch_all(&self.pool)
         .await;
 
         if let Err(e) = res {
-            error!(
-                "[DB] Failed to get to be completed payments with min confirmations {}",
-                min_confirmations
-            );
+            error!("[DB] Failed to get to be completed payments");
             return Err(e);
         }
 
@@ -339,7 +293,6 @@ impl PaymentRepository for SqlxPostgresqlRepository {
                 address: row.address,
                 amount: row.amount,
                 received: row.received,
-                confirmations: row.confirmations,
                 initiated: row.initiated,
                 completed: row.completed,
                 created_at: row.created_at,
@@ -416,7 +369,6 @@ impl PaymentRepository for SqlxPostgresqlRepository {
                 address: row.address,
                 amount: row.amount,
                 received: row.received,
-                confirmations: row.confirmations,
                 initiated: row.initiated,
                 completed: row.completed,
                 created_at: row.created_at,

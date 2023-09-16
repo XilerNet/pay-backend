@@ -15,12 +15,6 @@ where
         log_data: Option<&str>,
     ) -> Result<(), sqlx::Error>;
 
-    async fn add_payment_confirmation(
-        &self,
-        payment_id: &Uuid,
-        confirmations: u64,
-    ) -> Result<(), sqlx::Error>;
-
     async fn add_payment_received(
         &self,
         payment_id: &Uuid,
@@ -48,10 +42,7 @@ where
 
     async fn get_to_be_initiated_addresses(&self) -> Result<Vec<String>, sqlx::Error>;
 
-    async fn get_to_be_completed_payments(
-        &self,
-        min_confirmations: usize,
-    ) -> Result<Vec<Uuid>, sqlx::Error>;
+    async fn get_to_be_completed_payments(&self) -> Result<Vec<Uuid>, sqlx::Error>;
 
     async fn get_payment(&self, payment_id: &Uuid) -> Result<Option<Payment>, sqlx::Error>;
 

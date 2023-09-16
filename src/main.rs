@@ -185,22 +185,6 @@ async fn background_payment_processor() {
                     }
                 }
 
-                let existing_confirmations = payment.confirmations as u32;
-
-                if confirmations > existing_confirmations {
-                    let diff = confirmations - existing_confirmations;
-                    let res = pool
-                        .add_payment_confirmation(&payment.id, diff as u64)
-                        .await;
-
-                    if let Err(e) = res {
-                        error!("Error adding payment confirmation: {}", e);
-                        continue;
-                    }
-
-                    debug!("Added {} confirmations for payment {}", diff, payment.id);
-                }
-
                 if confirmations < CONFIRMATIONS_REQUIRED {
                     continue;
                 }

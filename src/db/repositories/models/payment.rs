@@ -12,7 +12,6 @@ pub struct Payment {
     pub amount: f64,
     pub received: f64,
 
-    pub confirmations: i32,
     pub initiated: bool,
     pub completed: bool,
 
