@@ -5,6 +5,7 @@ use bitcoincore_rpc::bitcoin::Network;
 pub enum Chain {
     Mainnet,
     Testnet,
+    Regtest,
 }
 
 impl Chain {
@@ -12,6 +13,7 @@ impl Chain {
         match self {
             Self::Mainnet => 8332,
             Self::Testnet => 18332,
+            Self::Regtest => 19001,
         }
     }
 
@@ -19,6 +21,7 @@ impl Chain {
         match self {
             Self::Mainnet => Network::Bitcoin,
             Self::Testnet => Network::Testnet,
+            Self::Regtest => Network::Regtest,
         }
     }
 }
@@ -30,6 +33,7 @@ impl FromStr for Chain {
         match s {
             "mainnet" => Ok(Self::Mainnet),
             "testnet" => Ok(Self::Testnet),
+            "regtest" => Ok(Self::Regtest),
             _ => Err(format!("unknown chain: {}", s)),
         }
     }
@@ -40,6 +44,7 @@ impl ToString for Chain {
         match self {
             Self::Mainnet => "mainnet".to_string(),
             Self::Testnet => "testnet".to_string(),
+            Self::Regtest => "regtest".to_string(),
         }
     }
 }

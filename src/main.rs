@@ -29,7 +29,7 @@ pub mod endpoints;
 pub mod responses;
 pub mod utils;
 
-pub const CHAIN: Chain = Chain::Testnet;
+pub const CHAIN: Chain = Chain::Regtest;
 pub const DOMAIN_PRICE_BTC: f64 = 0.0005;
 const BITCOIN_WALLET_NAME: &str = "ord";
 const COOKIE_LOCATION: &str = "/run/media/arthur/T7/bitcoin/testnet3/.cookie";
@@ -100,7 +100,10 @@ fn get_rpc() -> Client {
         BITCOIN_WALLET_NAME
     );
 
-    Client::new(&rpc_url, Auth::CookieFile(COOKIE_LOCATION.into())).unwrap()
+    // let auth = Auth::CookieFile(COOKIE_LOCATION.into());
+    let auth = Auth::UserPass("admin1".into(), "123".into()); // for testing purposes
+
+    Client::new(&rpc_url, auth).unwrap()
 }
 
 async fn background_payment_processor() {
