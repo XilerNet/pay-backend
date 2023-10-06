@@ -6,12 +6,16 @@ use lazy_static::lazy_static;
 use std::{env, str::from_utf8, sync::Arc};
 use tracing::info;
 
-use crate::db::encryption_methods::EncryptionMethods;
+use crate::data::encryption_methods::EncryptionMethods;
 
 lazy_static! {
     static ref ENCRYPTION_KEY: Arc<Vec<u8>> = {
         let key_string =
-            env::var("DATABASE_KEY").expect("DATABASE_KEY not set or is not 32 bytes long");
+            env::var("DATABASE_KEY").expect("DATABASE_KEY not set or is not 32 characters long");
+
+        if key_string.len() != 32 {
+            panic!("DATABASE_KEY not set or is not 32 characters long");
+        }
 
         let key = key_string.bytes().collect::<Vec<u8>>();
         info!("Encryption key loaded");
@@ -46,11 +50,13 @@ fn encrypt(plaintext: &[u8], encryption_method: EncryptionMethods) -> Vec<u8> {
     match encryption_method {
         EncryptionMethods::AES256 => {
             let padded_plaintext = pkcs7_padding(plaintext, 16); // Pad the plaintext to be multiple of 16 bytes
+
             let mut encryptor = aes::ecb_encryptor(
                 aes::KeySize::KeySize256,
                 &ENCRYPTION_KEY,
                 blockmodes::NoPadding,
             );
+
             let mut final_result = Vec::<u8>::new();
             let mut read_buffer = buffer::RefReadBuffer::new(&padded_plaintext);
             let mut buffer = [0; 4096];
@@ -88,6 +94,7 @@ fn decrypt(ciphertext: &[u8], encryption_method: EncryptionMethods) -> Vec<u8> {
                 &ENCRYPTION_KEY,
                 blockmodes::NoPadding,
             );
+
             let mut final_result = Vec::<u8>::new();
             let mut read_buffer = buffer::RefReadBuffer::new(ciphertext);
             let mut buffer = [0; 4096];
