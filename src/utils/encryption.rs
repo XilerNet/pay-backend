@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 use std::{env, str::from_utf8, sync::Arc};
 use tracing::info;
 
-use crate::data::encryption_methods::EncryptionMethods;
+use crate::db::encryption_methods::EncryptionMethods;
 
 lazy_static! {
     static ref ENCRYPTION_KEY: Arc<Vec<u8>> = {
