@@ -93,7 +93,7 @@ impl Api {
         endpoints::status::status(&pool, &auth.id, &id).await
     }
 
-    #[oai(path = "/domains", method = "post")]
+    #[oai(path = "/domains", method = "get")]
     async fn domains(&self, pool: Data<&Repository>, auth: AuthApiKey) -> PaidDomains {
         endpoints::domains::domains(&pool, &auth.id).await
     }
