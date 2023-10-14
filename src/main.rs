@@ -8,6 +8,7 @@ use bitcoincore_rpc::{
 };
 use db::{traits::SessionRepository, PaymentRepository, Repository};
 use endpoints::{
+    domains::PaidDomains,
     new::{CreatePaymentData, CreatePaymentResponse},
     status::PaymentStatusResponse,
 };
@@ -90,6 +91,11 @@ impl Api {
         id: Path<Uuid>,
     ) -> PaymentStatusResponse {
         endpoints::status::status(&pool, &auth.id, &id).await
+    }
+
+    #[oai(path = "/domains", method = "post")]
+    async fn domains(&self, pool: Data<&Repository>, auth: AuthApiKey) -> PaidDomains {
+        endpoints::domains::domains(&pool, &auth.id).await
     }
 }
 

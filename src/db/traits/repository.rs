@@ -36,7 +36,7 @@ where
         payment_id: &Uuid,
         target: &str,
         contents: &str,
-    ) -> Result<(), sqlx::Error>;
+    ) -> Result<Uuid, sqlx::Error>;
 
     async fn initiate_payment(&self, payment_id: &Uuid) -> Result<(), sqlx::Error>;
 
@@ -69,7 +69,13 @@ where
     async fn add_private_key(
         &self,
         account_id: &Uuid,
+        payment_inscription_content_id: &Uuid,
         domain: &str,
         private_key: &str,
     ) -> Result<(), sqlx::Error>;
+
+    async fn get_owned_domains(
+        &self,
+        account_id: &Uuid,
+    ) -> Result<Vec<(String, bool, Option<String>)>, sqlx::Error>;
 }

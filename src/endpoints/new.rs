@@ -147,15 +147,20 @@ pub async fn new(
                     .create_payment_inscription(&id, &domain.target, &inscription)
                     .await;
 
-                if let Err(e) = res {
-                    error!("Failed to create payment inscription: {}", e);
+                if res.is_err() {
+                    error!(
+                        "Failed to create payment inscription: {}",
+                        res.err().unwrap()
+                    );
                     return CreatePaymentResponse::InternalServerError(Json(
                         "Internal server error".into(),
                     ));
                 }
 
+                let id = res.unwrap();
+
                 let res = pool
-                    .add_private_key(&user, &domain.domain, &private_key)
+                    .add_private_key(&user, &id, &domain.domain, &private_key)
                     .await;
 
                 if let Err(e) = res {

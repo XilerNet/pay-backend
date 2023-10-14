@@ -172,34 +172,36 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         payment_id: &Uuid,
         target: &str,
         contents: &str,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<Uuid, sqlx::Error> {
         debug!(
             "[DB] Creating payment inscription {} {} {}",
             payment_id, target, contents
         );
 
         let res = sqlx::query!(
-            r#"INSERT INTO payment_inscription_contents (payment_id, target, content) VALUES ($1, $2, $3);"#,
+            r#"INSERT INTO payment_inscription_contents (payment_id, target, content) VALUES ($1, $2, $3) RETURNING id;"#,
             payment_id,
             target,
             contents
         );
-        let res = res.execute(&self.pool).await;
 
-        if let Err(e) = res {
-            error!(
-                "[DB] Failed to create payment inscription {} {} {}",
-                payment_id, target, contents
-            );
-            return Err(e);
+        match res.fetch_one(&self.pool).await {
+            Ok(res) => {
+                debug!(
+                    "[DB] Created payment inscription {} {} {}",
+                    payment_id, target, contents
+                );
+
+                Ok(res.id)
+            }
+            Err(e) => {
+                error!(
+                    "[DB] Failed to create payment inscription {} {} {}",
+                    payment_id, target, contents
+                );
+                return Err(e);
+            }
         }
-
-        debug!(
-            "[DB] Created payment inscription {} {} {}",
-            payment_id, target, contents
-        );
-
-        Ok(())
     }
 
     async fn initiate_payment(&self, payment_id: &Uuid) -> Result<(), sqlx::Error> {
@@ -381,12 +383,6 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         Ok(None)
     }
 
-    // CREATE TABLE IF NOT EXISTS payment_inscription_contents (
-    //   payment_id UUID PRIMARY KEY REFERENCES payments(id),
-    //   target VARCHAR(255) NOT NULL,
-    //   content TEXT NOT NULL
-    // );
-
     async fn add_payment_inscription_contents(
         &self,
         payment_id: &Uuid,
@@ -466,6 +462,7 @@ impl PaymentRepository for SqlxPostgresqlRepository {
     async fn add_private_key(
         &self,
         account_id: &Uuid,
+        payment_inscription_content_id: &Uuid,
         domain: &str,
         private_key: &str,
     ) -> Result<(), sqlx::Error> {
@@ -477,8 +474,9 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         let (private_key, encryption_method) = encrypt_string(private_key);
 
         let res = sqlx::query!(
-            r#"INSERT INTO private_keys (account_id, domain, encryption_method, private_key) VALUES ($1, $2, $3, $4);"#,
+            r#"INSERT INTO private_keys (account_id, payment_inscription_content_id, domain, encryption_method, private_key) VALUES ($1, $2, $3, $4, $5);"#,
             account_id,
+            payment_inscription_content_id,
             domain,
             encryption_method as i16,
             private_key
@@ -500,6 +498,46 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         );
 
         Ok(())
+    }
+
+    async fn get_owned_domains(
+        &self,
+        account_id: &Uuid,
+    ) -> Result<Vec<(String, bool, Option<String>)>, sqlx::Error> {
+        debug!("[DB] Getting owned domains for account {}", account_id);
+
+        let res = sqlx::query!(
+            r#"SELECT private_keys.domain, payments.completed, payment_inscriptions.reveal_tx as "reveal_tx?" 
+            FROM private_keys 
+            INNER JOIN payment_inscription_contents ON payment_inscription_contents.id = private_keys.payment_inscription_content_id 
+            INNER JOIN payments ON payments.id = payment_inscription_contents.payment_id 
+            LEFT JOIN payment_inscriptions ON payment_inscriptions.content = payment_inscription_contents.id 
+                WHERE payments.initiated = TRUE 
+                AND private_keys.account_id = $1;"#,
+            account_id
+        )
+        .fetch_all(&self.pool)
+        .await;
+
+        if let Err(e) = res {
+            error!(
+                "[DB] Failed to get owned domains for account {}",
+                account_id
+            );
+            return Err(e);
+        }
+
+        let res = res.unwrap();
+
+        let mut domains = Vec::new();
+
+        for row in res {
+            domains.push((row.domain, row.completed, row.reveal_tx));
+        }
+
+        debug!("[DB] Got owned domains for account {}", account_id);
+
+        Ok(domains)
     }
 }
 
