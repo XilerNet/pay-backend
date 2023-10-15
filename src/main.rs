@@ -44,7 +44,7 @@ const BITCOIN_WALLET_NAME: &str = "ord";
 #[cfg(not(debug_assertions))]
 const BITCOIN_WALLET_NAME: &str = "xiler";
 const COOKIE_LOCATION: &str = "/home/bitcheck/.bitcoin/.cookie";
-const CONFIRMATIONS_REQUIRED: u32 = 6;
+const CONFIRMATIONS_REQUIRED: u32 = 1;
 
 struct ApiKeyContext {
     id: Uuid,
