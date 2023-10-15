@@ -30,7 +30,12 @@ pub mod endpoints;
 pub mod responses;
 pub mod utils;
 
+#[cfg(debug_assertions)]
 pub const CHAIN: Chain = Chain::Regtest;
+
+#[cfg(not(debug_assertions))]
+pub const CHAIN: Chain = Chain::Mainnet;
+
 pub const DOMAIN_PRICE_BTC: f64 = 0.0007;
 
 #[cfg(debug_assertions)]
