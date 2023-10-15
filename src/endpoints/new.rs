@@ -134,6 +134,31 @@ pub async fn new(
         }
     }
 
+    let already_owned = pool
+        .get_already_owned_domains(&domains.iter().map(|d| d.domain.clone()).collect::<Vec<_>>())
+        .await;
+
+    match already_owned {
+        Ok(already_owned) => {
+            if already_owned.len() > 0 {
+                return CreatePaymentResponse::BadRequest(Json(
+                    format!(
+                        "Some domain(s) are already owned: {}",
+                        already_owned.join(", ")
+                    )
+                    .as_str()
+                    .into(),
+                ));
+            }
+        }
+        Err(e) => {
+            error!("Failed to check already owned domains: {}", e);
+            return CreatePaymentResponse::InternalServerError(Json(
+                "Internal server error".into(),
+            ));
+        }
+    }
+
     let amount = domains.len() as f64 * DOMAIN_PRICE_BTC;
 
     let id = pool.create_payment(user, &address, amount).await;

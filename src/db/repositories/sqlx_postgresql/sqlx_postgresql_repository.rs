@@ -539,6 +539,41 @@ impl PaymentRepository for SqlxPostgresqlRepository {
 
         Ok(domains)
     }
+
+    async fn get_already_owned_domains(
+        &self,
+        domains: &[String],
+    ) -> Result<Vec<String>, sqlx::Error> {
+        debug!("[DB] Getting already owned domains {:?}", domains);
+
+        let res = sqlx::query!(
+            r#"SELECT private_keys.domain FROM private_keys 
+            INNER JOIN payment_inscription_contents ON payment_inscription_contents.id = private_keys.payment_inscription_content_id
+            INNER JOIN payments ON payments.id = payment_inscription_contents.payment_id
+            WHERE private_keys.domain = ANY($1)
+                AND payments.initiated = True;"#,
+            domains
+        )
+        .fetch_all(&self.pool)
+        .await;
+
+        if let Err(e) = res {
+            error!("[DB] Failed to get already owned domains {:?}", domains);
+            return Err(e);
+        }
+
+        let res = res.unwrap();
+
+        let mut domains = Vec::new();
+
+        for row in res {
+            domains.push(row.domain);
+        }
+
+        debug!("[DB] Got already owned domains {:?}", domains);
+
+        Ok(domains)
+    }
 }
 
 impl SessionRepository for SqlxPostgresqlRepository {

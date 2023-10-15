@@ -78,4 +78,9 @@ where
         &self,
         account_id: &Uuid,
     ) -> Result<Vec<(String, bool, Option<String>)>, sqlx::Error>;
+
+    async fn get_already_owned_domains(
+        &self,
+        domains: &[String],
+    ) -> Result<Vec<String>, sqlx::Error>;
 }
