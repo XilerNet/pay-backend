@@ -135,7 +135,10 @@ pub async fn new(
     }
 
     let already_owned = pool
-        .get_already_owned_domains(&domains.iter().map(|d| d.domain.clone()).collect::<Vec<_>>())
+        .get_already_owned_domains(
+            &user,
+            &domains.iter().map(|d| d.domain.clone()).collect::<Vec<_>>(),
+        )
         .await;
 
     match already_owned {

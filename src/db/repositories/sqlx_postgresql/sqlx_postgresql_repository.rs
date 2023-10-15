@@ -542,13 +542,15 @@ impl PaymentRepository for SqlxPostgresqlRepository {
 
     async fn get_already_owned_domains(
         &self,
+        user: &Uuid,
         domains: &[String],
     ) -> Result<Vec<String>, sqlx::Error> {
         debug!("[DB] Getting already owned domains {:?}", domains);
 
         let res = sqlx::query!(
-            r#"SELECT private_keys.domain FROM private_keys WHERE private_keys.domain = ANY($1)"#,
-            domains
+            r#"SELECT private_keys.domain FROM private_keys WHERE private_keys.domain = ANY($1) AND private_keys.account_id <> $2;"#,
+            domains,
+            user
         )
         .fetch_all(&self.pool)
         .await;

@@ -81,6 +81,7 @@ where
 
     async fn get_already_owned_domains(
         &self,
+        user: &Uuid,
         domains: &[String],
     ) -> Result<Vec<String>, sqlx::Error>;
 
