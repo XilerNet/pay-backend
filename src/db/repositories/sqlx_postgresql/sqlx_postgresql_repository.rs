@@ -547,11 +547,7 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         debug!("[DB] Getting already owned domains {:?}", domains);
 
         let res = sqlx::query!(
-            r#"SELECT private_keys.domain FROM private_keys 
-            INNER JOIN payment_inscription_contents ON payment_inscription_contents.id = private_keys.payment_inscription_content_id
-            INNER JOIN payments ON payments.id = payment_inscription_contents.payment_id
-            WHERE private_keys.domain = ANY($1)
-                AND payments.initiated = True;"#,
+            r#"SELECT private_keys.domain FROM private_keys WHERE private_keys.domain = ANY($1)"#,
             domains
         )
         .fetch_all(&self.pool)
@@ -573,6 +569,25 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         debug!("[DB] Got already owned domains {:?}", domains);
 
         Ok(domains)
+    }
+
+    async fn cleanup_old_orders(&self) -> Result<(), sqlx::Error> {
+        debug!("[DB] Cleaning up old orders");
+
+        let res = sqlx::query!(
+            r#"DELETE FROM payments WHERE initiated = False AND created_at < NOW() - INTERVAL '35 minutes';"#
+        )
+        .execute(&self.pool)
+        .await;
+
+        if let Err(e) = res {
+            error!("[DB] Failed to clean up old orders");
+            return Err(e);
+        }
+
+        debug!("[DB] Cleaned up old orders");
+
+        Ok(())
     }
 }
 

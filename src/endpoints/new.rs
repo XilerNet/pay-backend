@@ -143,7 +143,7 @@ pub async fn new(
             if already_owned.len() > 0 {
                 return CreatePaymentResponse::BadRequest(Json(
                     format!(
-                        "Some domain(s) are already owned: {}",
+                        "Front runner protection: the following domains are already owned or being proccessed (try again later ~35 mins max): {}",
                         already_owned.join(", ")
                     )
                     .as_str()
@@ -152,7 +152,7 @@ pub async fn new(
             }
         }
         Err(e) => {
-            error!("Failed to check already owned domains: {}", e);
+            error!("Failed to run front runner protection check: {}", e);
             return CreatePaymentResponse::InternalServerError(Json(
                 "Internal server error".into(),
             ));

@@ -31,7 +31,7 @@ pub mod responses;
 pub mod utils;
 
 pub const CHAIN: Chain = Chain::Regtest;
-pub const DOMAIN_PRICE_BTC: f64 = 0.0005;
+pub const DOMAIN_PRICE_BTC: f64 = 0.0007;
 const BITCOIN_WALLET_NAME: &str = "ord";
 const COOKIE_LOCATION: &str = "/run/media/arthur/T7/bitcoin/testnet3/.cookie";
 const CONFIRMATIONS_REQUIRED: u32 = 6;
@@ -223,6 +223,10 @@ async fn background_payment_processor() {
                     continue;
                 }
             }
+        }
+
+        if let Err(e) = pool.cleanup_old_orders().await {
+            error!("Error cleaning up old orders: {}", e);
         }
 
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;

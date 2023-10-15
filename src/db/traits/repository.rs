@@ -83,4 +83,6 @@ where
         &self,
         domains: &[String],
     ) -> Result<Vec<String>, sqlx::Error>;
+
+    async fn cleanup_old_orders(&self) -> Result<(), sqlx::Error>;
 }
