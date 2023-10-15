@@ -32,6 +32,11 @@ pub mod utils;
 
 pub const CHAIN: Chain = Chain::Regtest;
 pub const DOMAIN_PRICE_BTC: f64 = 0.0007;
+
+#[cfg(debug_assertions)]
+const BITCOIN_WALLET_NAME: &str = "ord";
+
+#[cfg(not(debug_assertions))]
 const BITCOIN_WALLET_NAME: &str = "xiler";
 const COOKIE_LOCATION: &str = "/home/bitcheck/.bitcoin/.cookie";
 const CONFIRMATIONS_REQUIRED: u32 = 6;
@@ -106,8 +111,11 @@ fn get_rpc() -> Client {
         BITCOIN_WALLET_NAME
     );
 
+    #[cfg(debug_assertions)]
+    let auth = Auth::UserPass("admin1".into(), "123".into()); // for testing purposes
+
+    #[cfg(not(debug_assertions))]
     let auth = Auth::CookieFile(COOKIE_LOCATION.into());
-    //let auth = Auth::UserPass("admin1".into(), "123".into()); // for testing purposes
 
     Client::new(&rpc_url, auth).unwrap()
 }
