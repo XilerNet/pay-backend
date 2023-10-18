@@ -27,18 +27,12 @@ pub struct CreatePaymentData {
     domains: Vec<CreatePaymentDataDomain>,
 }
 
-#[derive(Debug, Object, Clone, Eq, PartialEq)]
-pub struct LoyaltyDiscountResponse {
-    message: String,
-    stackable: bool,
-}
-
 #[derive(Debug, Object, Clone, PartialEq)]
 pub struct CreatePaymentResponseObject {
     id: Uuid,
     address: String,
     amount: f64,
-    loyalty_discounts: Vec<LoyaltyDiscountResponse>,
+    loyalty_discounts: Vec<String>,
 }
 
 #[derive(ApiResponse)]
@@ -193,6 +187,9 @@ pub async fn new(
     let mut stackable_loyalty_discount_percentage = 0.0;
     let mut stackable_loyalty_discount_value = 0.0;
     let mut to_add_loyalty_discounts = Vec::new();
+    let mut used_loyalty_discount_messages = Vec::new();
+    let mut loyalty_discount_message_value: Option<String> = None;
+    let mut loyalty_discount_message_percentage: Option<String> = None;
 
     for LoyaltyDiscount(collection_id, amount, currency, message, stackable) in
         loyalty_discounts.iter()
@@ -221,20 +218,26 @@ pub async fn new(
                 ));
             }
         }
+
+        used_loyalty_discount_messages.push(message.clone());
     }
 
     domains_total_price -= stackable_loyalty_discount_value;
 
-    for LoyaltyDiscount(collection_id, amount, currency, _, _) in to_add_loyalty_discounts.iter() {
+    for LoyaltyDiscount(collection_id, amount, currency, message, _) in
+        to_add_loyalty_discounts.iter()
+    {
         match currency.as_str() {
             "%" => {
                 if loyalty_discount_percentage < *amount {
                     loyalty_discount_percentage = *amount;
+                    loyalty_discount_message_percentage = Some(message.clone());
                 }
             }
             "BTC" => {
                 if loyalty_discount_value < *amount {
                     loyalty_discount_value = *amount;
+                    loyalty_discount_message_value = Some(message.clone());
                 }
             }
             _ => {
@@ -249,9 +252,25 @@ pub async fn new(
         }
     }
 
-    domains_total_price -= loyalty_discount_value;
-    let percentage_discount = loyalty_discount_percentage + stackable_loyalty_discount_percentage;
-    domains_total_price *= 1f64 - (percentage_discount / 100f64);
+    let leftover_after_value_discount = domains_total_price - loyalty_discount_value;
+    let leftover_after_percentage_discount =
+        domains_total_price * (1f64 - (loyalty_discount_percentage / 100f64));
+
+    if leftover_after_value_discount < leftover_after_percentage_discount {
+        domains_total_price -= loyalty_discount_value;
+
+        if let Some(message) = loyalty_discount_message_value {
+            used_loyalty_discount_messages.push(message);
+        }
+    } else {
+        stackable_loyalty_discount_percentage += loyalty_discount_percentage;
+
+        if let Some(message) = loyalty_discount_message_percentage {
+            used_loyalty_discount_messages.push(message);
+        }
+    }
+
+    domains_total_price *= 1f64 - (stackable_loyalty_discount_percentage / 100f64);
 
     if domains_total_price < MINIMUM_DOMAIN_PRICE_BTC {
         return CreatePaymentResponse::InternalServerError(
@@ -312,13 +331,7 @@ pub async fn new(
                 id,
                 address,
                 amount: domains_total_price,
-                loyalty_discounts: loyalty_discounts
-                    .into_iter()
-                    .map(|dc| LoyaltyDiscountResponse {
-                        message: dc.3,
-                        stackable: dc.4,
-                    })
-                    .collect(),
+                loyalty_discounts: used_loyalty_discount_messages,
             }))
         }
         Err(e) => {
