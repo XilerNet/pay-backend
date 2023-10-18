@@ -2,6 +2,8 @@ use uuid::Uuid;
 
 use crate::db::{log::LogTypes, repositories::models::payment::Payment};
 
+pub struct LoyaltyDiscount(pub String, pub f64, pub String, pub String, pub bool);
+
 pub trait PaymentRepository
 where
     Self: Clone,
@@ -86,4 +88,9 @@ where
     ) -> Result<Vec<String>, sqlx::Error>;
 
     async fn cleanup_old_orders(&self) -> Result<(), sqlx::Error>;
+
+    async fn get_loyalty_discounts_for_collections(
+        &self,
+        collections: &[(String, i16, i32)],
+    ) -> Result<Vec<LoyaltyDiscount>, sqlx::Error>;
 }

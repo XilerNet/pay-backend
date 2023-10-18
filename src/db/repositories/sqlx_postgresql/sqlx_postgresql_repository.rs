@@ -1,10 +1,14 @@
+use std::collections::HashMap;
+
 use sqlx::PgPool;
 use tracing::{debug, error};
 use uuid::Uuid;
 
 use crate::{
     db::{
-        log::LogTypes, repositories::models::payment::Payment, traits::SessionRepository,
+        log::LogTypes,
+        repositories::models::payment::Payment,
+        traits::{repository::LoyaltyDiscount, SessionRepository},
         PaymentRepository,
     },
     utils::encryption::encrypt_string,
@@ -590,6 +594,59 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         debug!("[DB] Cleaned up old orders");
 
         Ok(())
+    }
+
+    async fn get_loyalty_discounts_for_collections(
+        &self,
+        collections: &[(String, i16, i32)],
+    ) -> Result<Vec<LoyaltyDiscount>, sqlx::Error> {
+        debug!(
+            "[DB] Getting loyalty discounts for collections {:?}",
+            collections
+        );
+
+        let mut discounts = HashMap::new();
+
+        for (collection, collection_type, amount_owned) in collections {
+            let res = sqlx::query!(
+                r#"SELECT id, collection_id, amount, currency, message, stackable FROM loyalty_discounts WHERE collection_id = $1 AND collection_type = $2 AND (collection_minimum_owned <= $3 OR collection_minimum_owned IS NULL);"#,
+                collection,
+                collection_type,
+                amount_owned
+            )
+            .fetch_all(&self.pool)
+            .await;
+
+            if let Err(e) = res {
+                error!(
+                    "[DB] Failed to get loyalty discounts for collection {}",
+                    collection
+                );
+                return Err(e);
+            }
+
+            let res = res.unwrap();
+
+            for row in res {
+                discounts.insert(
+                    row.id,
+                    LoyaltyDiscount(
+                        row.collection_id,
+                        row.amount.try_into().unwrap(),
+                        row.currency,
+                        row.message,
+                        row.stackable,
+                    ),
+                );
+            }
+        }
+
+        debug!(
+            "[DB] Got loyalty discounts for collections {:?}",
+            collections
+        );
+
+        Ok(discounts.into_values().collect())
     }
 }
 

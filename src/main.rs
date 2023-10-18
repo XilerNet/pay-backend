@@ -37,6 +37,7 @@ pub const CHAIN: Chain = Chain::Regtest;
 pub const CHAIN: Chain = Chain::Mainnet;
 
 pub const DOMAIN_PRICE_BTC: f64 = 0.0007;
+pub const MINIMUM_DOMAIN_PRICE_BTC: f64 = 0.0004;
 
 #[cfg(debug_assertions)]
 const BITCOIN_WALLET_NAME: &str = "ord";

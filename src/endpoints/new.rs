@@ -9,9 +9,10 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::db::log::LogTypes;
+use crate::db::traits::repository::LoyaltyDiscount;
 use crate::db::{PaymentRepository, Repository};
 use crate::responses::error::ErrorResponse;
-use crate::{CHAIN, DOMAIN_PRICE_BTC};
+use crate::{CHAIN, DOMAIN_PRICE_BTC, MINIMUM_DOMAIN_PRICE_BTC};
 
 const DOMAIN_REGEX: &str = r"^[a-z\d](?:[a-z\d-]{0,251}[a-z\d])?\.?o?$";
 
@@ -26,11 +27,18 @@ pub struct CreatePaymentData {
     domains: Vec<CreatePaymentDataDomain>,
 }
 
+#[derive(Debug, Object, Clone, Eq, PartialEq)]
+pub struct LoyaltyDiscountResponse {
+    message: String,
+    stackable: bool,
+}
+
 #[derive(Debug, Object, Clone, PartialEq)]
 pub struct CreatePaymentResponseObject {
     id: Uuid,
     address: String,
     amount: f64,
+    loyalty_discounts: Vec<LoyaltyDiscountResponse>,
 }
 
 #[derive(ApiResponse)]
@@ -162,9 +170,98 @@ pub async fn new(
         }
     }
 
-    let amount = domains.len() as f64 * DOMAIN_PRICE_BTC;
+    let mut domains_total_price = domains.len() as f64 * DOMAIN_PRICE_BTC;
 
-    let id = pool.create_payment(user, &address, amount).await;
+    let user_brc20_collections = vec![("$BIT".to_string(), 27000)];
+    let user_collections = vec![
+        ("bit-apes".to_string(), 1),
+        ("bitcoin-frogs".to_string(), 1),
+        ("other".to_string(), 1),
+    ];
+
+    let mut user_collection_query = Vec::new();
+    user_collection_query.extend(user_brc20_collections.into_iter().map(|c| (c.0, 1, c.1)));
+    user_collection_query.extend(user_collections.into_iter().map(|c| (c.0, 2, c.1)));
+
+    let loyalty_discounts = pool
+        .get_loyalty_discounts_for_collections(&user_collection_query)
+        .await
+        .unwrap_or_default();
+
+    let mut loyalty_discount_percentage = 0.0;
+    let mut loyalty_discount_value = 0.0;
+    let mut stackable_loyalty_discount_percentage = 0.0;
+    let mut stackable_loyalty_discount_value = 0.0;
+    let mut to_add_loyalty_discounts = Vec::new();
+
+    for LoyaltyDiscount(collection_id, amount, currency, message, stackable) in
+        loyalty_discounts.iter()
+    {
+        if !*stackable {
+            to_add_loyalty_discounts.push(LoyaltyDiscount(
+                collection_id.clone(),
+                *amount,
+                currency.clone(),
+                message.clone(),
+                *stackable,
+            ));
+            continue;
+        }
+
+        match currency.as_str() {
+            "%" => stackable_loyalty_discount_percentage += *amount,
+            "BTC" => stackable_loyalty_discount_value += *amount,
+            _ => {
+                error!(
+                    "LoyaltyDiscount - Invalid currency: {} for {}",
+                    currency, collection_id
+                );
+                return CreatePaymentResponse::InternalServerError(Json(
+                    "Invalid loyalty discount, please contact a system administrator.".into(),
+                ));
+            }
+        }
+    }
+
+    domains_total_price -= stackable_loyalty_discount_value;
+
+    for LoyaltyDiscount(collection_id, amount, currency, _, _) in to_add_loyalty_discounts.iter() {
+        match currency.as_str() {
+            "%" => {
+                if loyalty_discount_percentage < *amount {
+                    loyalty_discount_percentage = *amount;
+                }
+            }
+            "BTC" => {
+                if loyalty_discount_value < *amount {
+                    loyalty_discount_value = *amount;
+                }
+            }
+            _ => {
+                error!(
+                    "LoyaltyDiscount - Invalid currency: {} for {}",
+                    currency, collection_id
+                );
+                return CreatePaymentResponse::InternalServerError(Json(
+                    "Invalid loyalty discount, please contact a system administrator.".into(),
+                ));
+            }
+        }
+    }
+
+    domains_total_price -= loyalty_discount_value;
+    let percentage_discount = loyalty_discount_percentage + stackable_loyalty_discount_percentage;
+    domains_total_price *= 1f64 - (percentage_discount / 100f64);
+
+    if domains_total_price < MINIMUM_DOMAIN_PRICE_BTC {
+        return CreatePaymentResponse::InternalServerError(
+            Json("Incorrect calculation of discounts, please contact a system administrator to get this in order.".into()),
+        );
+    }
+
+    let id = pool
+        .create_payment(user, &address, domains_total_price)
+        .await;
 
     match id {
         Ok(id) => {
@@ -214,7 +311,14 @@ pub async fn new(
             CreatePaymentResponse::Ok(Json(CreatePaymentResponseObject {
                 id,
                 address,
-                amount,
+                amount: domains_total_price,
+                loyalty_discounts: loyalty_discounts
+                    .into_iter()
+                    .map(|dc| LoyaltyDiscountResponse {
+                        message: dc.3,
+                        stackable: dc.4,
+                    })
+                    .collect(),
             }))
         }
         Err(e) => {
