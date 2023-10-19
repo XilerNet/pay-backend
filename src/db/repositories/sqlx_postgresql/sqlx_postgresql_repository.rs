@@ -648,6 +648,38 @@ impl PaymentRepository for SqlxPostgresqlRepository {
 
         Ok(discounts.into_values().collect())
     }
+
+    async fn delete_payment(
+        &self,
+        user: &Uuid,
+        payment_id: &Uuid,
+    ) -> Result<Result<(), ()>, sqlx::Error> {
+        debug!("[DB] Deleting payment {}", payment_id);
+
+        let res = sqlx::query!(
+            r#"DELETE FROM payments WHERE id = $1 AND account_id = $2 RETURNING id;"#,
+            payment_id,
+            user
+        )
+        .fetch_optional(&self.pool)
+        .await;
+
+        if let Err(e) = res {
+            error!("[DB] Failed to delete payment {}", payment_id);
+            return Err(e);
+        }
+
+        match res.unwrap() {
+            Some(_) => {
+                debug!("[DB] Deleted payment {}", payment_id);
+                Ok(Ok(()))
+            }
+            None => {
+                debug!("[DB] Payment {} not found", payment_id);
+                Ok(Err(()))
+            }
+        }
+    }
 }
 
 impl SessionRepository for SqlxPostgresqlRepository {

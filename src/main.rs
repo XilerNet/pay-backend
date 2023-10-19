@@ -8,15 +8,20 @@ use bitcoincore_rpc::{
 };
 use db::{traits::SessionRepository, PaymentRepository, Repository};
 use endpoints::{
+    delete::DeletePaymentResponse,
     domains::PaidDomains,
     new::{CreatePaymentData, CreatePaymentResponse},
+    pricing::PricingResponse,
     status::PaymentStatusResponse,
 };
 use poem::{
     listener::TcpListener, middleware::Cors, web::Data, EndpointExt, Request, Route, Server,
 };
 use poem_openapi::{
-    auth::Bearer, param::Path, payload::Json, OpenApi, OpenApiService, SecurityScheme,
+    auth::Bearer,
+    param::{Path, Query},
+    payload::Json,
+    OpenApi, OpenApiService, SecurityScheme,
 };
 use std::ops::Deref;
 use tracing::{error, info};
@@ -104,9 +109,29 @@ impl Api {
         endpoints::status::status(&pool, &auth.id, &id).await
     }
 
+    #[oai(path = "/delete/:id", method = "delete")]
+    async fn delete(
+        &self,
+        pool: Data<&Repository>,
+        auth: AuthApiKey,
+        id: Path<Uuid>,
+    ) -> DeletePaymentResponse {
+        endpoints::delete::delete(&pool, &auth.id, &id).await
+    }
+
     #[oai(path = "/domains", method = "get")]
     async fn domains(&self, pool: Data<&Repository>, auth: AuthApiKey) -> PaidDomains {
         endpoints::domains::domains(&pool, &auth.id).await
+    }
+
+    #[oai(path = "/pricing", method = "get")]
+    async fn pricing(
+        &self,
+        pool: Data<&Repository>,
+        auth: AuthApiKey,
+        amount: Query<u32>,
+    ) -> PricingResponse {
+        endpoints::pricing::get_price(&pool, &auth.id, amount.0).await
     }
 }
 

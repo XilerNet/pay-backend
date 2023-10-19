@@ -93,4 +93,10 @@ where
         &self,
         collections: &[(String, i16, i32)],
     ) -> Result<Vec<LoyaltyDiscount>, sqlx::Error>;
+
+    async fn delete_payment(
+        &self,
+        user: &Uuid,
+        payment_id: &Uuid,
+    ) -> Result<Result<(), ()>, sqlx::Error>;
 }
