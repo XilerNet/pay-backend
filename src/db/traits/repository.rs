@@ -91,7 +91,7 @@ where
 
     async fn get_loyalty_discounts_for_collections(
         &self,
-        collections: &[(String, i16, i32)],
+        collections: &[(String, i16, f64)],
     ) -> Result<Vec<LoyaltyDiscount>, sqlx::Error>;
 
     async fn delete_payment(
@@ -99,4 +99,6 @@ where
         user: &Uuid,
         payment_id: &Uuid,
     ) -> Result<Result<(), ()>, sqlx::Error>;
+
+    async fn get_addresses(&self, account_id: &Uuid) -> Result<Vec<String>, sqlx::Error>;
 }

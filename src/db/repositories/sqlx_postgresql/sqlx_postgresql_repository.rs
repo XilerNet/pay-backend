@@ -11,7 +11,7 @@ use crate::{
         traits::{repository::LoyaltyDiscount, SessionRepository},
         PaymentRepository,
     },
-    utils::encryption::encrypt_string,
+    utils::encryption::{decrypt_string, encrypt_string},
 };
 
 #[derive(Clone)]
@@ -598,7 +598,7 @@ impl PaymentRepository for SqlxPostgresqlRepository {
 
     async fn get_loyalty_discounts_for_collections(
         &self,
-        collections: &[(String, i16, i32)],
+        collections: &[(String, i16, f64)],
     ) -> Result<Vec<LoyaltyDiscount>, sqlx::Error> {
         debug!(
             "[DB] Getting loyalty discounts for collections {:?}",
@@ -679,6 +679,26 @@ impl PaymentRepository for SqlxPostgresqlRepository {
                 Ok(Err(()))
             }
         }
+    }
+
+    async fn get_addresses(&self, account_id: &Uuid) -> Result<Vec<String>, sqlx::Error> {
+        debug!("[DB] Getting addresses {}", account_id);
+        let addresses = sqlx::query!(
+            r#"SELECT address, encryption_method FROM addresses WHERE account_id = $1;"#,
+            account_id
+        )
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|s| decrypt_string(&s.address, s.encryption_method.into()))
+        .collect::<Vec<_>>();
+
+        debug!(
+            "[DB] Got addresses {:?} from account {}",
+            addresses, account_id
+        );
+
+        Ok(addresses)
     }
 }
 

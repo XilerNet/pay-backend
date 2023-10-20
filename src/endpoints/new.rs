@@ -12,6 +12,7 @@ use crate::db::log::LogTypes;
 use crate::db::traits::repository::LoyaltyDiscount;
 use crate::db::{PaymentRepository, Repository};
 use crate::responses::error::ErrorResponse;
+use crate::utils::get_wallets_collections::get_wallets_collections;
 use crate::{CHAIN, DOMAIN_PRICE_BTC, MINIMUM_DOMAIN_PRICE_BTC};
 
 const DOMAIN_REGEX: &str = r"^[a-z\d](?:[a-z\d-]{0,251}[a-z\d])?\.?o?$";
@@ -68,16 +69,27 @@ fn generate_domain_inscription(domain: &str) -> (String, String) {
 async fn calculate_price(user: &Uuid, amount: u32, pool: &Repository) -> Result<f64, String> {
     let mut final_price = amount as f64 * DOMAIN_PRICE_BTC;
 
-    let user_brc20_collections = vec![("$BIT".to_string(), 27000)];
+    let addresses = pool
+        .get_addresses(&user)
+        .await
+        .map_err(|_| "Failed to get addresses for user.".to_string())?;
+
+    let addresses_mapped = addresses.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
+    let owned = get_wallets_collections(&addresses_mapped)
+        .await
+        .map_err(|_| {
+            "Failed to get owned collections, please contact a system administrator.".to_string()
+        })?;
+
     let user_collections = vec![
-        ("bit-apes".to_string(), 1),
-        ("bitcoin-frogs".to_string(), 1),
-        ("other".to_string(), 1),
+        ("bit-apes".to_string(), 1f64),
+        ("bitcoin-frogs".to_string(), 1f64),
+        ("other".to_string(), 1f64),
     ];
 
     let mut user_collection_query = Vec::new();
-    user_collection_query.extend(user_brc20_collections.into_iter().map(|c| (c.0, 1, c.1)));
-    user_collection_query.extend(user_collections.into_iter().map(|c| (c.0, 2, c.1)));
+    user_collection_query.extend(owned.brc20s.into_iter().map(|c| (c.ticker, 0, c.amount)));
+    user_collection_query.extend(user_collections.into_iter().map(|c| (c.0, 1, c.1)));
 
     let loyalty_discounts = pool
         .get_loyalty_discounts_for_collections(&user_collection_query)
@@ -117,6 +129,7 @@ async fn calculate_price(user: &Uuid, amount: u32, pool: &Repository) -> Result<
     }
 
     match non_stackable_loyalty_discount_currency.as_str() {
+        "" => {}
         "%" => stackable_loyalty_discount += non_stackable_loyalty_discount,
         "BTC" => final_price -= non_stackable_loyalty_discount,
         _ => panic!("Impossible situation"),

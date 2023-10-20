@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::db::traits::repository::LoyaltyDiscount;
 use crate::db::{PaymentRepository, Repository};
 use crate::responses::error::ErrorResponse;
+use crate::utils::get_wallets_collections::get_wallets_collections;
 use crate::{DOMAIN_PRICE_BTC, MINIMUM_DOMAIN_PRICE_BTC};
 
 #[derive(Debug, Object, Clone, PartialEq)]
@@ -46,18 +47,41 @@ pub async fn get_price(pool: &Repository, user: &Uuid, amount: u32) -> PricingRe
         return PricingResponse::BadRequest(Json("Can not calculate price for 0 domains.".into()));
     }
 
+    let addresses = pool.get_addresses(&user).await;
+
+    if let Err(e) = addresses {
+        error!("get_price - Failed to get addresses for user: {}", e);
+        return PricingResponse::InternalServerError(Json(
+            "Failed to get addresses for user.".into(),
+        ));
+    }
+
+    let addresses = addresses.unwrap();
+
     let mut final_price = amount as f64 * DOMAIN_PRICE_BTC;
 
-    let user_brc20_collections = vec![("$BIT".to_string(), 27000)];
+    let addresses_mapped = addresses.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
+
+    let owned = get_wallets_collections(&addresses_mapped).await;
+
+    if let Err(e) = owned {
+        error!("get_price - Failed to get owned collections: {}", e);
+        return PricingResponse::InternalServerError(Json(
+            "Failed to get owned collections.".into(),
+        ));
+    }
+
+    let owned = owned.unwrap();
+
     let user_collections = vec![
-        ("bit-apes".to_string(), 1),
-        ("bitcoin-frogs".to_string(), 1),
-        ("other".to_string(), 1),
+        ("bit-apes".to_string(), 1f64),
+        ("bitcoin-frogs".to_string(), 1f64),
+        ("other".to_string(), 1f64),
     ];
 
     let mut user_collection_query = Vec::new();
-    user_collection_query.extend(user_brc20_collections.into_iter().map(|c| (c.0, 1, c.1)));
-    user_collection_query.extend(user_collections.into_iter().map(|c| (c.0, 2, c.1)));
+    user_collection_query.extend(owned.brc20s.into_iter().map(|c| (c.ticker, 0, c.amount)));
+    user_collection_query.extend(user_collections.into_iter().map(|c| (c.0, 1, c.1)));
 
     let loyalty_discounts = pool
         .get_loyalty_discounts_for_collections(&user_collection_query)
@@ -108,6 +132,7 @@ pub async fn get_price(pool: &Repository, user: &Uuid, amount: u32) -> PricingRe
     }
 
     match non_stackable_loyalty_discount_currency.as_str() {
+        "" => {}
         "%" => stackable_loyalty_discount += non_stackable_loyalty_discount,
         "BTC" => final_price -= non_stackable_loyalty_discount,
         _ => panic!("Impossible situation"),
