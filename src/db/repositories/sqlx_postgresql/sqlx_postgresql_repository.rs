@@ -609,7 +609,7 @@ impl PaymentRepository for SqlxPostgresqlRepository {
 
         for (collection, collection_type, amount_owned) in collections {
             let res = sqlx::query!(
-                r#"SELECT id, collection_id, amount, currency, message, stackable FROM loyalty_discounts WHERE collection_id = $1 AND collection_type = $2 AND (collection_minimum_owned <= $3 OR collection_minimum_owned IS NULL);"#,
+                r#"SELECT id, collection_id, amount, currency, message, stackable FROM loyalty_discounts WHERE collection_id = $1 AND collection_type = $2 AND (collection_minimum_owned <= $3 OR collection_minimum_owned IS NULL) ORDER BY collection_id ASC, collection_minimum_owned DESC;"#,
                 collection,
                 collection_type,
                 amount_owned
