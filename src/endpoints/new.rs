@@ -81,15 +81,14 @@ async fn calculate_price(user: &Uuid, amount: u32, pool: &Repository) -> Result<
             "Failed to get owned collections, please contact a system administrator.".to_string()
         })?;
 
-    let user_collections = vec![
-        ("bit-apes".to_string(), 1f64),
-        ("bitcoin-frogs".to_string(), 1f64),
-        ("other".to_string(), 1f64),
-    ];
-
     let mut user_collection_query = Vec::new();
     user_collection_query.extend(owned.brc20s.into_iter().map(|c| (c.ticker, 0, c.amount)));
-    user_collection_query.extend(user_collections.into_iter().map(|c| (c.0, 1, c.1)));
+    user_collection_query.extend(
+        owned
+            .collections
+            .into_iter()
+            .map(|c| (c.ticker, 1, c.amount)),
+    );
 
     let loyalty_discounts = pool
         .get_loyalty_discounts_for_collections(&user_collection_query)
