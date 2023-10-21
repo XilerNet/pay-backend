@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use futures::future::try_join_all;
+use futures::{future::try_join_all, try_join};
 use serde::{Deserialize, Serialize};
 
 const BRC_20_API_URL: &str = "https://turbo.ordinalswallet.com/wallet/";
@@ -82,8 +82,10 @@ pub async fn get_wallets_collections(
         addresses: addresses.iter().map(|x| x.to_string()).collect(),
     };
 
-    let brc20s = get_brc20_collections(addresses).await?;
-    let collections = get_collections(&addresses_request).await?;
+    let (brc20s, collections) = try_join!(
+        get_brc20_collections(addresses),
+        get_collections(&addresses_request),
+    )?;
 
     Ok(WalletCollections {
         brc20s,
