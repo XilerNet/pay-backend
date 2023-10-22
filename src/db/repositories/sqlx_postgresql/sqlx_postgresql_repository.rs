@@ -657,7 +657,7 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         debug!("[DB] Deleting payment {}", payment_id);
 
         let res = sqlx::query!(
-            r#"DELETE FROM payments WHERE id = $1 AND account_id = $2 RETURNING id;"#,
+            r#"DELETE FROM payments WHERE id = $1 AND account_id = $2 AND initiated = False RETURNING id;"#,
             payment_id,
             user
         )
