@@ -76,6 +76,12 @@ where
         private_key: &str,
     ) -> Result<(), sqlx::Error>;
 
+    async fn get_private_key(
+        &self,
+        account_id: &Uuid,
+        domain: &str,
+    ) -> Result<Option<String>, sqlx::Error>;
+
     async fn get_owned_domains(
         &self,
         account_id: &Uuid,

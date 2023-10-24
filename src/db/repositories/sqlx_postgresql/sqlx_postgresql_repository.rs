@@ -504,6 +504,42 @@ impl PaymentRepository for SqlxPostgresqlRepository {
         Ok(())
     }
 
+    // TODO: Add log
+    async fn get_private_key(
+        &self,
+        account_id: &Uuid,
+        domain: &str,
+    ) -> Result<Option<String>, sqlx::Error> {
+        debug!(
+            "[DB] Fetching private key for {} and domain {}",
+            account_id, domain
+        );
+
+        let res = sqlx::query!(
+            r#"SELECT encryption_method, private_key FROM private_keys WHERE account_id = $1 AND domain = $2;"#,
+            account_id,
+            domain
+        )
+            .fetch_optional(&self.pool)
+            .await;
+
+        if let Err(e) = res {
+            error!(
+                "[DB] Failed to get private key for {} and domain {}",
+                account_id, domain
+            );
+            return Err(e);
+        }
+
+        match res.unwrap() {
+            Some(res) => Ok(Some(decrypt_string(
+                &res.private_key,
+                res.encryption_method.into(),
+            ))),
+            None => Ok(None),
+        }
+    }
+
     async fn get_owned_domains(
         &self,
         account_id: &Uuid,

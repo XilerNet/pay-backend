@@ -10,6 +10,7 @@ use db::{traits::SessionRepository, PaymentRepository, Repository};
 use endpoints::{
     delete::DeletePaymentResponse,
     domains::PaidDomains,
+    get_private_key::GetPrivateKeyResponse,
     new::{CreatePaymentData, CreatePaymentResponse},
     pricing::PricingResponse,
     status::PaymentStatusResponse,
@@ -132,6 +133,16 @@ impl Api {
         amount: Query<u32>,
     ) -> PricingResponse {
         endpoints::pricing::get_price(&pool, &auth.id, amount.0).await
+    }
+
+    #[oai(path = "/private-key/:domain", method = "get")]
+    async fn private_key(
+        &self,
+        pool: Data<&Repository>,
+        auth: AuthApiKey,
+        domain: Path<String>,
+    ) -> GetPrivateKeyResponse {
+        endpoints::get_private_key::get_private_key(&pool, &auth.id, &domain.0).await
     }
 }
 
