@@ -312,7 +312,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "http://localhost:25202".to_string(),
         ]
     } else {
-        vec![env::var("PROD_MAIN_URL").expect("PROD_MAIN_URL not set")]
+        vec![
+            env::var("PROD_MAIN_URL").expect("PROD_MAIN_URL not set"),
+            "https://www.xiler.net".to_string(),
+            "https://xiler.net".to_string(),
+        ]
     };
 
     let routes = Route::new()
